@@ -1,0 +1,15 @@
+rules:
+  - id: python-eval-input
+    languages: [python]
+    severity: ERROR
+    message: Dynamic evaluation can execute untrusted code; inspect input provenance.
+    pattern: eval(...)
+  - id: python-shell-true
+    languages: [python]
+    severity: WARNING
+    message: shell=True can enable shell injection; inspect command construction.
+    patterns:
+      - pattern-either:
+          - pattern: subprocess.run(..., shell=True, ...)
+          - pattern: subprocess.call(..., shell=True, ...)
+          - pattern: subprocess.Popen(..., shell=True, ...)

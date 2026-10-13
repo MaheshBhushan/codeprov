@@ -1,0 +1,16 @@
+[study]
+repositories = ["pallets/click"]
+since = "2026-08-31"
+until = "2026-08-31"
+observed_until = "2026-10-13"
+followup_days = 180
+max_prs = 2
+ai_identities = ["noreply@anthropic.com", "copilot@github.com", "noreply@openai.com"]
+semgrep_rules = "rules/python-security.yml"
+
+[review]
+endpoint = "https://api.openai.com/v1/chat/completions"
+model = "gpt-6.1-sol"
+effort = "low"
+max_chars = 60000
+development_repositories = []

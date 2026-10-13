@@ -1,0 +1,21 @@
+[study]
+repositories = ["pallets/itsdangerous", "pallets/click", "pallets/flask"]
+since = "2024-01-01"
+until = "2024-03-31"
+observed_until = "2024-09-30"
+followup_days = 180
+max_prs = 20
+# Exact email identities, not fuzzy matches against human names.
+ai_identities = ["noreply@anthropic.com", "copilot@github.com", "noreply@openai.com"]
+semgrep_rules = "rules/python-security.yml"
+# Optional JSON arrays with repo, sha, evidence; see README.
+# manual_labels = "manual-labels.json"
+# bug_fixes = "bug-fixes.json"
+
+[review]
+endpoint = "https://api.openai.com/v1/chat/completions"
+model = "gpt-6.1-sol"
+effort = "low"
+max_chars = 60000
+# Freeze development/test repository allocation before adjudicating results.
+development_repositories = ["pallets/itsdangerous"]
