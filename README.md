@@ -15,10 +15,10 @@ Comparing AI-assisted and manual code requires more than counting commits. Prove
 
 ## Quickstart
 
-Requires **Git**, [uv](https://docs.astral.sh/uv/), and Python **3.11–3.13**; Python **3.12** was exercised. The clone command uses the [GitHub CLI](https://cli.github.com/) and requires authenticated access while this repository is private.
+Requires **Git**, [uv](https://docs.astral.sh/uv/), and Python **3.11–3.13**; Python **3.12** was exercised. Cloning this public repository requires no GitHub account.
 
 ```sh
-gh repo clone MaheshBhushan/codeprov
+git clone https://github.com/MaheshBhushan/codeprov.git
 cd codeprov
 uv sync --locked --python 3.12
 uv run codeprov --study study.pilot.toml run --export-only
