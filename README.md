@@ -1,129 +1,179 @@
 # codeprov
 
-A local Python research CLI for declared AI-assisted code provenance, maintainability, static security findings, candidate defect attribution, and historical LLM review evaluation.
+Trace declared AI assistance in GitHub pull requests, measure code quality, and evaluate historical LLM reviews.
 
-**No trailer is not proof of human authorship.** The primary observable is declared assistance. Human-written comparisons require independently documented manual labels. Results are observational associations, not causal effects.
+[Quickstart](#quickstart) · [Verified pilot](#verified-pilot) · [Pipeline](#pipeline) · [Methodology](#methodology) · [Citation](#citation)
 
-## Install and run
+> [!IMPORTANT]
+> **No AI trailer does not mean human-written code.** `codeprov` distinguishes declared assistance, independently verified manual authorship, and unknown provenance. Results are observational associations—not causal effects.
+
+## Why this exists
+
+Comparing AI-assisted and manual code requires more than counting commits. Provenance labels can be missing, scanner findings can predate a change, bug attribution is uncertain, and historical human reviews are incomplete ground truth.
+
+`codeprov` preserves the evidence behind each measurement: PR membership, original commit snapshots, co-author trailers, before/after scanner output, validated bug-fix links, and review-time diffs. A local Python CLI turns that evidence into auditable datasets and reports without executing mined repository code.
+
+## Quickstart
+
+Requires **Git**, [uv](https://docs.astral.sh/uv/), and Python **3.11–3.13**; Python **3.12** was exercised. The clone command uses the [GitHub CLI](https://cli.github.com/) and requires authenticated access while this repository is private.
 
 ```sh
-uv sync --python 3.12
-uv run codeprov --study study.pilot.toml init
+gh repo clone MaheshBhushan/codeprov
+cd codeprov
+uv sync --locked --python 3.12
 uv run codeprov --study study.pilot.toml run --export-only
 uv run codeprov --study study.pilot.toml status
 ```
 
-`study.pilot.toml` limits the public pilot to two merged PRs created on 2026-08-31 in `pallets/click`, selected to exercise historical inline-review extraction. This is a smoke cohort, not a representative research sample; its 180-day defect windows are incomplete at the configured observation cutoff. `study.toml` selects three Python repositories over an older window. Public GitHub requests can work without credentials but unauthenticated rate limits are small. Set `GITHUB_TOKEN` for larger samples. Do not put secrets in configuration, manifests, or adjudications.
+The pilot mines public Click PRs, scans changed Python files, exports a historical review request, and writes a report under `runs/<study-hash>/`. The command prints the report path. Raw evidence, databases, and environments stay local and are excluded from Git.
 
-The CLI creates `runs/<study-hash>/manifest.json` and `study.sqlite`, with raw evidence and reports alongside them. Selection, rule content, evidence-file content, review settings and dependency versions are frozen. Changed inputs create a different study hash; changed runtime versions require a different `--results` root. Exact installed dependencies are in `uv.lock`.
+> [!NOTE]
+> Export-only mode needs no LLM credential and makes no model call. Public GitHub mining can run unauthenticated, but larger samples need `GITHUB_TOKEN` to avoid rate limits. Missing fix labels or adjudications stay pending; insufficient cohorts produce `not_estimable`, never invented scores.
 
-Commands can be run independently and resumed:
+## Verified pilot
+
+The frozen smoke run `d3ddbd7a02a8fd33` used [`study.pilot.toml`](study.pilot.toml): merged `pallets/click` PRs created on 2026-08-31, capped at two, with an observation cutoff of 2026-10-13.
+
+| Observed artifact | Count | Evidence |
+| --- | ---: | --- |
+| Merged PRs | 2 | GitHub API records and exact commit membership |
+| Unique PR commits | 2 | PyDriller source snapshots |
+| Historical inline comments | 6 | Original comment commit IDs retained |
+| Python file measurements | 3 | Bandit and Semgrep completed every measured file |
+| Historical review requests | 1 | Original-snapshot payload exported; no model response fabricated |
+
+This is a **smoke cohort, not a representative research sample**. It was selected to exercise inline-review extraction. Its defect windows are incomplete, no validated fixes were supplied, and both commits have unknown provenance. **No research effects or live-LLM precision/recall were estimated.**
+
+Repeat mining preserved records without duplicate memberships. Isolated throwaway runs also exercised finding introduction/resolution, line shifts, duplicate findings, scanner failures, SZZ rename/squash/censoring boundaries, provenance conflicts, review matching, and stale-result invalidation. Continuous and binary mixed-effects fitting passed on controlled synthetic data; that data was never inserted into the public cohort. The HTTP review client was exercised against a local deterministic provider, not a live LLM.
+
+The generated report is local, not a committed benchmark asset. Run the quickstart to produce the report, evidence export, and model diagnostics on your machine; GitHub data may change between fresh runs.
+
+## Pipeline
+
+```mermaid
+flowchart LR
+    A[Study configuration] --> B[GitHub + PyDriller mining]
+    B --> C[radon + Bandit + Semgrep]
+    B --> D[Validated fixes + SZZ]
+    B --> E[Historical LLM reviews]
+    E --> F[Human adjudication]
+    C --> G[statsmodels analysis]
+    D --> G
+    F --> G
+    G --> H[CSV + JSON + Markdown report]
+```
+
+Stages are explicit and resumable. Successful API pages are cached; keys prevent duplicate evidence rows. A failed stage records its error and stops the command. `pending`, `partial`, and `not_estimable` remain visible in `status` and the report.
+
+## Usage
+
+Global `--study` and `--results` options precede the subcommand. Use [`study.toml`](study.toml) for the broader three-repository selection, or edit a study before starting a new run.
 
 ```sh
-uv run codeprov mine
-uv run codeprov measure
-uv run codeprov szz
-uv run codeprov review --export-only
-uv run codeprov review
-uv run codeprov evaluate --adjudications adjudications.json
-uv run codeprov analyze
-uv run codeprov report
+uv run codeprov --study study.pilot.toml init
+uv run codeprov --study study.pilot.toml mine
+uv run codeprov --study study.pilot.toml measure
+uv run codeprov --study study.pilot.toml szz
+uv run codeprov --study study.pilot.toml review --export-only
+uv run codeprov --study study.pilot.toml analyze
+uv run codeprov --study study.pilot.toml report
 ```
 
-Global `--study` and `--results` options precede the command. `run --export-only` exports genuine historical review requests without fabricating findings. `run --adjudications FILE` also evaluates human annotations. Missing adjudications remain pending. A stage failure is recorded and stops the command; inspect `status` and evidence before resuming. New completed reviews or changed adjudications invalidate derived scores and reports; rerun `analyze` and `report` after evaluation.
+### Calling the reviewer
 
-## Study configuration
+Set `[review].endpoint` to an OpenAI-compatible chat-completions endpoint and `[review].model` to a provider-supported model ID. The example config uses `gpt-6.1-sol`; provider availability is **not** implied. This implementation requires `effort = "low"`. Supply `OPENAI_API_KEY` through the environment, then run:
 
-The `[study]` section specifies owner/repo names, inclusive PR creation dates, an observation cutoff, fixed SZZ follow-up days, a per-repository PR cap, assistant email identities and a local Semgrep rule file. Sampling is restricted to merged PRs, not all project commits. See the mining evidence for actual coverage and exclusions. PR commit SHAs and integration/merge SHAs are separate records.
-
-- `declared_ai`: qualifying trailing `Co-Authored-By` email matches the frozen identity list.
-- `verified_manual`: independent evidence supports the full commit, with no conflicting AI declaration.
-- `unknown`: absent qualifying trailer or conflicting evidence. Generic human co-authors do not change this.
-
-Optional `manual_labels` and `bug_fixes` paths point to JSON arrays:
-
-```json
-[
-  {
-    "repo": "owner/repository",
-    "sha": "0123456789abcdef0123456789abcdef01234567",
-    "evidence": "URL or documented independent adjudication supporting this label"
-  }
-]
+```sh
+uv run codeprov --study study.pilot.toml review
 ```
 
-The SHA above illustrates the format, not a real label. Use actual full commit SHAs from the configured repositories. Bug-fix keywords alone are not validated evidence. Keep an auditable label protocol and document coverage; an incomplete list cannot prove defect freedom.
+After completed reviews, fill the human-only worksheet at `runs/<study-hash>/review/adjudication-worksheet.json`. Save its **`adjudications` object alone** as `adjudications.json` before running:
 
-## Measurements and safety
+```sh
+uv run codeprov --study study.pilot.toml evaluate --adjudications adjudications.json
+uv run codeprov --study study.pilot.toml analyze
+uv run codeprov --study study.pilot.toml report
+```
 
-- **radon:** maintainability index, source LOC and summed function/method cyclomatic complexity. Class aggregate complexity is not counted again. Parent/head deltas are undefined when a side is absent; root/merge exclusions are explicit.
-- **Bandit and Semgrep:** changed Python sources are materialized in isolated temporary directories and scanned without executing target code or installing its dependencies. The included local Semgrep rules check dynamic evaluation and shell execution; they are a fixed, limited rule set, not exhaustive security coverage.
-- **Finding deltas:** before/after findings are matched by rule, path and normalized offending code rather than line number alone. Duplicate findings retain multiplicity. Scan failure is missing data, never zero findings. Raw scanner outputs and errors are retained.
-- **SZZ:** PyDriller identifies commits that last modified deleted bug-fix lines. Only validated fixes and sufficiently observed, reachable candidate histories contribute. Squash integration ambiguity, unavailable objects and censored windows remain explicit. Attribution is a candidate link, not proven causation. No bug-fix evidence produces pending/null outcomes.
+New completed reviews or changed adjudications invalidate derived scores and reports. Rebuild them after evaluation. Saved requests and prompt hashes support inspection; oversized or unavailable snapshots are skipped explicitly rather than truncated.
 
-A mined repository is untrusted input. The pipeline does not run repository scripts or hooks. Static scanner parsing still runs native tools under the current user's permissions; use OS/container isolation for adversarial repositories. LLM review requests send selected source code to the configured provider; only mine code you are allowed to transmit.
+## Methodology
 
-## Historical LLM review
+| Question | Measurement | Interpretation boundary |
+| --- | --- | --- |
+| Who wrote it? | Terminal `Co-Authored-By` trailers plus independent manual labels | Exact assistant-email matches show declared assistance, not a complete account of authorship |
+| Is it maintainable? | radon MI, LOC, and summed function/method complexity; parent/head deltas | Class aggregates are not double-counted; missing sides and root/merge commits have explicit exclusions |
+| Is it secure? | Bandit and pinned local Semgrep rules; introduced/resolved findings | Warnings are not confirmed vulnerabilities; failed scans are missing data, not clean scans |
+| Is it defect-prone? | PyDriller deleted-line SZZ over validated fixes and equal observation windows | Links are candidate attributions; incomplete labels cannot establish defect freedom |
+| Does the reviewer help? | Issue-level human matching, recovery precision/recall, and adjudicated finding validity | Historical comments are incomplete ground truth; valid unmatched discoveries are reported separately |
 
-Set `[review].endpoint` to an OpenAI-compatible chat-completions endpoint and `[review].model` to a model identifier supported by that provider. The example uses the requested `gpt-6.1-sol` identifier with `effort = "low"`; provider availability is not implied. Supply `OPENAI_API_KEY` to call the provider. HTTPS is required except for loopback endpoints.
+<details>
+<summary>Provenance, statistical models, and scientific limitations</summary>
 
-Review snapshots use the original human-comment commit SHA and a merge-base diff. The request excludes human comments, later fixes, PR descriptions, and provenance labels. The system prompt treats repository code as untrusted data. Oversize or unavailable snapshots are reported rather than silently truncated. Saved requests and prompt hashes support auditing. Export-only requests do not count as completed reviews.
+- `declared_ai`: a terminal co-author email matches the frozen assistant identity list.
+- `verified_manual`: independent evidence supports manual authorship with no conflicting AI declaration.
+- `unknown`: no qualifying declaration or contradictory evidence. Ordinary human co-authors do not establish manual authorship. Conflicts are excluded from provenance models.
+- Continuous outcomes use Gaussian `MixedLM`; binary scanner/SZZ outcomes use Bayesian variational `BinomialBayesMixedGLM`, with repository random intercepts. Confidence and approximate posterior credible intervals are labeled separately.
+- Commit models control change size, prior changed-file complexity, and author experience measured as reachable ancestor commits with the exact author email. Declared-AI versus verified-manual and declared-AI versus unknown are separate comparisons.
+- Fits require at least 20 complete observations, two repositories, and five observations per cohort. Binary fits also require five events/non-events and nonseparated cohort cells. Missing data, rank deficiency, and failed convergence return explicit reasons rather than coefficients.
+- Held-out review models use exploratory, unweighted per-PR empirical logits with a 0.5 continuity correction—not a binomial likelihood. Mixed-provenance PRs are excluded.
+- Trailer disclosure is selective. SZZ can misattribute refactors and miss addition-only fixes; unresolved squash histories and incomplete follow-up windows remain excluded. Semgrep rules cover only a limited security subset. Report all comparisons rather than selecting significant outcomes.
 
-Findings must use a changed Python file and a valid new-side diff line. Structured output contains `findings`, each with `path`, `line`, `category` and `message`. The provider cannot execute tools or repository code.
+</details>
 
-### Human adjudication
+<details>
+<summary>Historical review isolation and human adjudication contract</summary>
 
-After actual reviews, the reviewer exports `review/adjudication-worksheet.json`. Fill its `adjudications` object and save that object alone as the evaluation input; the surrounding worksheet contains human-only evidence. Do not ask another LLM to invent semantic ground truth. Freeze `development_repositories` before evaluation; other selected repositories are held out as `test`.
+Requests use the original human-comment commit SHA and a historical merge-base diff. They contain no human comments, PR descriptions, later fixes, or provenance labels. Findings must identify a changed Python file and a valid new-side diff line; the model receives no execution tools.
 
-The JSON contract has `version: 1` and a `snapshots` array. Every reviewed snapshot requires:
+The input has `version: 1` and a `snapshots` array. Each reviewed snapshot requires its frozen `snapshot_id` and `split`, plus:
 
-- `snapshot_id` and its frozen `split`.
-- `comments`: every eligible human comment, with `comment_id`, `disposition` (`issue` or `ignore`), `canonical_comment_id`, and a rationale. Group duplicate comments under one canonical issue; explicitly ignore non-actionable remarks.
-- `finding_groups`: every actual finding assigned to one issue group, with `canonical_finding_id`, `finding_ids`, a rationale, and human-assessed `genuine` boolean.
-- `matches`: one-to-one issue matches, each with canonical `finding_id`, canonical `comment_id`, and a rationale.
+- `comments`: `comment_id`, `disposition` (`issue` or `ignore`), `canonical_comment_id`, and a rationale. Group duplicate comments under one issue; ignored comments use a null canonical ID.
+- `finding_groups`: `canonical_finding_id`, `finding_ids`, a rationale, and a human-assessed `genuine` boolean.
+- `matches`: one-to-one canonical `finding_id`/`comment_id` pairs with a rationale.
 
-Bot and non-Python comments are excluded. Replies are not independently counted without human issue grouping. Unknown IDs, incomplete coverage, duplicate matches and cross-snapshot matches are rejected. A blank worksheet is pending annotation, not a negative label.
+Coverage must be complete. Bot and non-Python comments are excluded; replies need human grouping or explicit exclusion. Unknown IDs, duplicate matches, cross-snapshot matches, and development/test mixing are rejected. Blank labels remain pending, not negative.
 
-Recovery precision is `TP/(TP+FP)` against historical issues; recovery recall is `TP/(TP+FN)`. Adjudicated precision separately credits independently valid findings absent from historical human comments. Undefined denominators are null, not zero. Scores aggregate per PR and development/test split; duplicate snapshots/issues must be adjudicated within the documented snapshot unit.
+Recovery precision is `TP/(TP+FP)`; recovery recall is `TP/(TP+FN)`. Adjudicated precision counts independently valid finding issues, including discoveries absent from historical comments. Undefined denominators are null. Scores aggregate per PR and frozen split, with issue grouping within each historical snapshot. See [`evaluation.py`](codeprov/evaluation.py) for the full contract and validation rules.
 
-## Analysis and artifacts
+</details>
 
-`analyze` exports commit- and PR-level inputs and fits repository-intercept mixed-effects models:
+## Configuration and reproducibility
 
-- Gaussian `MixedLM` for maintainability and complexity deltas.
-- Bayesian variational `BinomialBayesMixedGLM` for presence of introduced scanner findings and SZZ candidate outcomes.
-- Exploratory Gaussian models of per-PR empirical-logit recovery precision/recall on held-out PRs only; a 0.5 continuity correction handles observed boundary proportions.
+Study files specify repositories, inclusive PR creation dates, observation cutoff, fixed SZZ follow-up, per-repository PR cap, exact assistant emails, and the local Semgrep rule file. Freeze `development_repositories` before adjudication; other selected repositories form the test split.
 
-Commit models control change size, prior changed-file complexity and author experience (the count of reachable ancestor commits with the exact author email). Continuous controls are standardized; transforms are recorded. Declared-AI versus verified-manual and declared-AI versus unknown are separate comparisons. Conflicting provenance evidence and mixed-provenance PRs are excluded from provenance models.
+Optional `manual_labels` and `bug_fixes` paths point to JSON arrays whose records contain `repo`, a full 40-character `sha`, and a nonempty `evidence` description. Use independently supported labels; bug-fix keywords alone are insufficient. [`config.py`](codeprov/config.py) validates the inputs before mining.
 
-Each fit requires at least 20 complete observations, two repositories and five observations per cohort. Binary outcomes also require five events/non-events and nonseparated cohort cells. Missing data, rank deficiency and failed convergence produce `not_estimable` with a reason. Bayesian credible intervals and frequentist confidence intervals are labeled separately. Review empirical-logit models are exploratory, not binomial likelihood models.
+[`uv.lock`](uv.lock) pins dependencies. The run manifest records selections, input-file hashes, review settings, and runtime versions. Changed inputs create a new study hash; changed runtime versions require a different `--results` root. Frozen rules and evidence-file copies are retained with the run.
 
-Important outputs:
-
-| Artifact | Purpose |
+| Local artifact | Purpose |
 | --- | --- |
-| `manifest.json` | Frozen inputs and runtime versions |
-| `study.sqlite` | Idempotent JSON evidence records and stage status |
-| Raw API/scanner/review files | Source evidence, errors and exact requests |
-| `commit-analysis.csv` | Commit model inputs and missingness |
-| `review-analysis.csv` | PR review model inputs |
-| `analysis.json` | Coefficients, uncertainty and fit diagnostics |
-| `report.md` | Readable results, coverage and limitations |
-| `evidence.json` | Audit export of normalized records |
+| `manifest.json`, `study.sqlite` | Frozen inputs, versions, evidence records, and stage status |
+| Raw API/scanner/review files | Source responses, errors, and exact review payloads |
+| `commit-analysis.csv`, `review-analysis.csv` | Model inputs and missingness |
+| `analysis.json` | Coefficients, uncertainty, and diagnostics—or reasons a fit is unavailable |
+| `report.md`, `evidence.json` | Readable results and normalized audit export |
 
-Historical comments are incomplete ground truth. Trailer disclosure is selective. SZZ is affected by refactors, squash histories and incomplete fix labels. Scanner findings are not confirmed vulnerabilities. Review comments and SZZ candidate links are not independent causal evidence. Do not select only significant outcomes from the reported comparisons.
+> [!WARNING]
+> Repositories are untrusted input. The pipeline does not execute their code or install their dependencies, but static analyzers run under your user's permissions; use OS/container isolation for adversarial sources. Live review sends selected code to the configured provider. Only transmit code you are allowed to share, and never commit API keys or private evidence.
 
-## Verification performed
+## Code map
 
-The frozen public smoke run `d3ddbd7a02a8fd33` mined two merged Click PRs, two commits and six inline comments; three Python file measurements completed both scanners, and one historical review request was exported. Repeat mining preserved exact records and PR memberships. Its report is `runs/d3ddbd7a02a8fd33/report.md`.
+[CLI and run manifest](codeprov/cli.py) · [GitHub mining](codeprov/mining.py) · [Provenance](codeprov/provenance.py) · [Measurements](codeprov/metrics.py) · [SZZ](codeprov/szz.py) · [Reviewer](codeprov/review.py) · [Evaluation](codeprov/evaluation.py) · [Models](codeprov/analysis.py) · [Report](codeprov/report.py)
 
-Isolated throwaway scenarios exercised:
+## Citation
 
-- Actual Bandit/Semgrep introduced and resolved findings, line shifts, duplicate finding multiplicity, invalid rules, scanner deadlines, unsafe paths, and unavailable existing source.
-- Radon conditional complexity and method-versus-class aggregation.
-- PyDriller SZZ known introductions, renamed fixes, whitespace-only changes, incomplete observation windows, out-of-window fixes, unresolved squash mappings, and missing validated labels.
-- Provenance terminal trailers, ordinary human co-authors, absent declarations, independently verified manual evidence, and conflicting labels.
-- Review payload isolation, strict response locations/types, byte-identical export/API requests, cached completed reviews, human issue deduplication, one-to-one matching, zero denominators, and stale-result invalidation.
-- Gaussian and binary mixed-effects fitting on controlled synthetic data; missing comparison cohorts remained not estimable.
+This is a software repository, not a published paper. Cite the repository and record the commit used for an experiment:
 
-The HTTP review client was exercised against a local deterministic provider, not a live LLM. Synthetic fixture data was never inserted into the public research run. Live model reviews need `OPENAI_API_KEY`, valid provider/model settings, and human adjudications; defect analysis needs validated fix evidence and completed observation windows. The smoke cohort reports no estimated research effects.
+```bibtex
+@misc{codeprov,
+  author = {{MaheshBhushan}},
+  title = {{codeprov}: Declared AI Code Provenance and Historical Review Evaluation},
+  howpublished = {\url{https://github.com/MaheshBhushan/codeprov}},
+  note = {Software repository; record the commit used}
+}
+```
+
+## License and contact
+
+No license file is included; do not assume reuse permission. Contact [MaheshBhushan](https://github.com/MaheshBhushan) for licensing questions. For bugs or collaboration, [open an issue](https://github.com/MaheshBhushan/codeprov/issues) with the study configuration, dependency versions, and relevant errors—without credentials or private source.
