@@ -85,8 +85,8 @@ def load(path: Path) -> Study:
         raise ValueError("non-local review endpoints require HTTPS")
     if not isinstance(review.get("model"), str) or not review["model"].strip():
         raise ValueError("review.model must be explicit")
-    if review.get("effort", "low") not in ("low", "medium", "high"):
-        raise ValueError("review.effort must be low, medium or high")
+    if review.get("effort", "low") != "low":
+        raise ValueError("review.effort must be low for the historical review protocol")
     if type(review.get("max_chars")) is not int or review["max_chars"] <= 0:
         raise ValueError("review.max_chars must be positive")
     development = review.get("development_repositories", [])
