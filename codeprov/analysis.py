@@ -73,6 +73,9 @@ def fit_model(frame: pd.DataFrame, outcome: str, baseline: str, binary=False, co
         (clean.provenance == cohort).sum() < 5 for cohort in ("declared_ai", baseline)
     ):
         return {**result, "reason": "require >=20 complete rows, >=2 repositories and >=5 rows in each cohort"}
+    # Validate before standardization: an infinite scale must not silently drop a control.
+    if not np.isfinite(clean[[outcome, *controls]].to_numpy(dtype=float)).all():
+        return {**result, "reason": "nonfinite model inputs"}
     # Standardize numeric controls for optimizer conditioning; provenance remains 0/1.
     transforms = {}
     active = ["declared_ai"]
