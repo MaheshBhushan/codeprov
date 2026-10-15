@@ -2,7 +2,7 @@
 
 Trace declared AI assistance in GitHub pull requests, measure code quality, and evaluate historical LLM reviews.
 
-[Quickstart](#quickstart) · [Verified pilot](#verified-pilot) · [Pipeline](#pipeline) · [Methodology](#methodology) · [Citation](#citation)
+[Quickstart](#quickstart) · [Historical pilot](#historical-pilot) · [Pipeline](#pipeline) · [Methodology](#methodology) · [Citation](#citation)
 
 > [!IMPORTANT]
 > **No AI trailer does not mean human-written code.** `codeprov` distinguishes declared assistance, independently verified manual authorship, and unknown provenance. Results are observational associations—not causal effects.
@@ -21,18 +21,29 @@ Requires **Git**, [uv](https://docs.astral.sh/uv/), and Python **3.11–3.13**; 
 git clone https://github.com/MaheshBhushan/codeprov.git
 cd codeprov
 uv sync --locked --python 3.12
-uv run codeprov --study study.pilot.toml run --export-only
-uv run codeprov --study study.pilot.toml status
+uv run --locked python -m unittest discover -s tests -v
+uv run --locked python -m codeprov.demo --output runs/offline-demo
 ```
 
-The pilot mines public Click PRs, scans changed Python files, exports a historical review request, and writes a report under `runs/<study-hash>/`. The command prints the report path. Raw evidence, databases, and environments stay local and are excluded from Git.
+The offline demo creates a deterministic local Git history and prints its report path. It exercises PyDriller, Radon, real Bandit/Semgrep scans, deleted-line SZZ, the HTTP reviewer client against a loopback fixture server, response validation, synthetic adjudication, analysis guards, and reporting. It uses no GitHub access, paid inference, or real API credential. GitHub discovery is bypassed and tested separately with mocked API transport.
+
+All demo commits, labels, responses, and annotations are synthetic. `demo-summary.json` records expected/actual counts, stage states, Git SHAs, bypasses, and artifact paths. The generated report starts with a synthetic marker. Its three commits produce `not_estimable` models. The seeded model tests validate successful fitting separately. The command supports repeated runs in its own marked output directory and refuses other nonempty directories. A runtime-version change requires a fresh output directory.
+
+See [VERIFICATION.md](VERIFICATION.md) for reproduced checks and remaining limits. Raw evidence, databases, and environments stay local and are excluded from Git.
+
+Optional public mining uses the network:
+
+```sh
+uv run --locked codeprov --study study.pilot.toml run --export-only
+uv run --locked codeprov --study study.pilot.toml status
+```
 
 > [!NOTE]
 > Export-only mode needs no LLM credential and makes no model call. Public GitHub mining can run unauthenticated, but larger samples need `GITHUB_TOKEN` to avoid rate limits. Missing fix labels or adjudications stay pending; insufficient cohorts produce `not_estimable`, never invented scores.
 
-## Verified pilot
+## Historical pilot
 
-The frozen smoke run `d3ddbd7a02a8fd33` used [`study.pilot.toml`](study.pilot.toml): merged `pallets/click` PRs created on 2026-08-31, capped at two, with an observation cutoff of 2026-10-13.
+The earlier pilot narrative records a smoke run `d3ddbd7a02a8fd33`. The current offline verification did not rerun or independently audit that public cohort. That run used [`study.pilot.toml`](study.pilot.toml): merged `pallets/click` PRs created on 2026-08-31, capped at two, with an observation cutoff of 2026-10-13.
 
 | Observed artifact | Count | Evidence |
 | --- | ---: | --- |
@@ -44,9 +55,9 @@ The frozen smoke run `d3ddbd7a02a8fd33` used [`study.pilot.toml`](study.pilot.to
 
 This is a **smoke cohort, not a representative research sample**. It was selected to exercise inline-review extraction. Its defect windows are incomplete, no validated fixes were supplied, and both commits have unknown provenance. **No research effects or live-LLM precision/recall were estimated.**
 
-Repeat mining preserved records without duplicate memberships. Isolated throwaway runs also exercised finding introduction/resolution, line shifts, duplicate findings, scanner failures, SZZ rename/squash/censoring boundaries, provenance conflicts, review matching, and stale-result invalidation. Continuous and binary mixed-effects fitting passed on controlled synthetic data; that data was never inserted into the public cohort. The HTTP review client was exercised against a local deterministic provider, not a live LLM.
+Earlier throwaway-check claims have no committed test artifacts from that run. The repository test suite and offline demo provide reproducible checks; [VERIFICATION.md](VERIFICATION.md) states their exact coverage. Neither the historical pilot nor the current synthetic fixtures establish empirical review quality or model effects.
 
-The generated report is local, not a committed benchmark asset. Run the quickstart to produce the report, evidence export, and model diagnostics on your machine; GitHub data may change between fresh runs.
+The historical pilot report is local and has no committed benchmark artifact. The optional public mining command produces a new report, evidence export, and model diagnostics; GitHub data may change between fresh runs.
 
 ## Pipeline
 
@@ -81,7 +92,7 @@ uv run codeprov --study study.pilot.toml report
 
 ### Calling the reviewer
 
-Set `[review].endpoint` to an OpenAI-compatible chat-completions endpoint and `[review].model` to a provider-supported model ID. The example config uses `gpt-6.1-sol`; provider availability is **not** implied. This implementation requires `effort = "low"`. Supply `OPENAI_API_KEY` through the environment, then run:
+Set `[review].endpoint` to an OpenAI-compatible chat-completions endpoint and `[review].model` to a provider-supported model ID. The example config uses `gpt-6.1-sol`; provider availability is **not** implied. Configuration loading rejects reviewer efforts other than `low`; this protocol requires `effort = "low"`. Supply `OPENAI_API_KEY` through the environment, then run:
 
 ```sh
 uv run codeprov --study study.pilot.toml review
