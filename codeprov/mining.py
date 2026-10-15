@@ -170,13 +170,13 @@ def _sample(api, repo, since, until, limit):
 def _experience(path, parents, email):
     if not parents:
         return 0
-    process = subprocess.Popen(["git", "-C", str(path), "log", "--format=%ae", *parents, "--"],
-                               env=_git_environment(), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                               text=True)
-    count = sum(line.rstrip("\n") == email for line in process.stdout)
-    error = process.stderr.read()
-    if process.wait():
-        raise RuntimeError(f"Author experience history failed in {path}: {error}")
+    with subprocess.Popen(["git", "-C", str(path), "log", "--format=%ae", *parents, "--"],
+                          env=_git_environment(), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          text=True) as process:
+        count = sum(line.rstrip("\n") == email for line in process.stdout)
+        error = process.stderr.read()
+        if process.wait():
+            raise RuntimeError(f"Author experience history failed in {path}: {error}")
     return count
 
 
